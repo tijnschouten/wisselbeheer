@@ -826,14 +826,17 @@ function executeSwap() {
 }
 
 function quickSub() {
-  const bank = spelers.filter(s => !s.opVeld);
+  const bank = spelers.filter(s => !s.opVeld).sort((a,b) => a.speeltijd - b.speeltijd);
   if (bank.length === 0) return;
-  // Selecteer N veldspelers met meeste speeltijd
   const veld = spelers.filter(s => s.opVeld).sort((a,b) => b.speeltijd - a.speeltijd);
-  const n = bank.length;
   selOut.clear(); selIn.clear();
-  veld.slice(0, n).forEach(s => selOut.add(s.id));
-  bank.forEach(s => selIn.add(s.id));
+  for (let i = 0; i < bank.length && i < veld.length; i++) {
+    if (veld[i].speeltijd > bank[i].speeltijd) {
+      selOut.add(veld[i].id);
+      selIn.add(bank[i].id);
+    }
+  }
+  if (selOut.size === 0) return;
   showSwapModal();
 }
 
