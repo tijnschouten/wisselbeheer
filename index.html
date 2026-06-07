@@ -99,7 +99,7 @@ body { background: var(--bg); color: var(--text); font-family: 'Helvetica Neue',
 .pscroll { flex: 1; overflow-y: auto; padding: 4px; -webkit-overflow-scrolling: touch; }
 
 /* Player cards */
-.pc { border-radius: 9px; padding: 7px 9px; margin-bottom: 4px; cursor: pointer; user-select: none; -webkit-user-select: none; position: relative; overflow: hidden; transition: border-color 0.1s, background 0.1s; border: 1.5px solid var(--border); }
+.pc { border-radius: 9px; padding: 7px 9px; margin-bottom: 4px; cursor: pointer; user-select: none; -webkit-user-select: none; position: relative; overflow: hidden; transition: border-color 0.1s, background 0.1s; border: 1.5px solid var(--border); display: flex; align-items: center; gap: 8px; }
 .pc::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
 .pc.v { background: rgba(200,240,58,0.04); }
 .pc.v::before { background: var(--accent); }
@@ -111,11 +111,11 @@ body { background: var(--bg); color: var(--text); font-family: 'Helvetica Neue',
 .pc-top { display: flex; justify-content: space-between; align-items: center; }
 .pc-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .pc-ico { font-size: 12px; flex-shrink: 0; margin-left: 3px; }
-.pc-time { font-family: 'Bebas', cursive; font-size: 16px; letter-spacing: 1px; margin-top: 1px; }
+.pc-left { flex: 1; min-width: 0; }
+.pc-time { font-family: 'Bebas', cursive; font-size: 16px; letter-spacing: 1px; margin-top: 2px; }
 .pc-time.tv { color: var(--accent); }
 .pc-time.tb { color: var(--gold); }
-.pc-bar { height: 3px; background: rgba(255,255,255,0.05); border-radius: 2px; margin-top: 4px; overflow: hidden; }
-.pc-fill { height: 100%; border-radius: 2px; }
+.pc-pie { flex-shrink: 0; display: block; }
 
 /* Confirm */
 .cfm { background: var(--surface); border-top: 1px solid var(--border); padding: 9px 12px; flex-shrink: 0; display: none; }
@@ -707,23 +707,37 @@ function speeltijdKleur(diffSec) {
   return diffSec > 180 ? '#ff6b6b' : diffSec > 60 ? '#f7c948' : 'var(--accent)';
 }
 
+const PIE_R = 14, PIE_C = 2 * Math.PI * PIE_R;
+function makePie(pct, kleur) {
+  const offset = PIE_C * (1 - pct / 100);
+  const tekst = pct > 0 ? pct + '%' : '';
+  return '<svg class="pc-pie" data-pie width="38" height="38" viewBox="0 0 38 38">'
+    + '<circle cx="19" cy="19" r="'+PIE_R+'" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3.5"/>'
+    + '<circle cx="19" cy="19" r="'+PIE_R+'" fill="none" stroke="'+kleur+'" stroke-width="3.5"'
+    + ' stroke-dasharray="'+PIE_C.toFixed(2)+'" stroke-dashoffset="'+offset.toFixed(2)+'"'
+    + ' stroke-linecap="round" transform="rotate(-90 19 19)"/>'
+    + '<text x="19" y="23" text-anchor="middle" font-size="9" font-weight="700" fill="'+kleur+'">'+tekst+'</text>'
+    + '</svg>';
+}
+
 function updateSpeeltijdUI() {
   const tijden = spelers.map(s => s.speeltijd);
   const minT = Math.min(...tijden);
-  const maxT = Math.max(...tijden);
-  const range = maxT - minT || 1;
   document.querySelectorAll('#veld-list [data-pid], #bank-list [data-pid]').forEach(el => {
     const id = +el.dataset.pid;
     const s = spelers.find(x => x.id === id);
     if (!s) return;
-    const width = Math.round(s.speeltijd / maxT * 100);
+    const pct = Math.round(s.speeltijd / Math.max(wedstrijdTijd, 1) * 100);
+    const kleur = speeltijdKleur(s.speeltijd - minT);
     const timeEl = el.querySelector('[data-time]');
-    const fillEl = el.querySelector('[data-fill]');
+    const pieEl = el.querySelector('[data-pie]');
     if (timeEl) timeEl.textContent = fmt(s.speeltijd);
-    if (fillEl) {
-      fillEl.style.width = width + '%';
-      fillEl.style.background = speeltijdKleur(s.speeltijd - minT);
-      fillEl.style.opacity = '1';
+    if (pieEl) {
+      const circles = pieEl.querySelectorAll('circle');
+      const offset = (PIE_C * (1 - pct / 100)).toFixed(2);
+      if (circles[1]) { circles[1].setAttribute('stroke', kleur); circles[1].setAttribute('stroke-dashoffset', offset); }
+      const txt = pieEl.querySelector('text');
+      if (txt) { txt.textContent = pct > 0 ? pct + '%' : ''; txt.setAttribute('fill', kleur); }
     }
   });
 }
@@ -743,21 +757,27 @@ function renderLists() {
 
   document.getElementById('veld-list').innerHTML = veld.map(s => {
     const sel = selOut.has(s.id);
-    const width = Math.round(s.speeltijd / maxT * 100);
+    const pct = Math.round(s.speeltijd / Math.max(wedstrijdTijd, 1) * 100);
+    const kleur = speeltijdKleur(s.speeltijd - minT);
     return '<div class="pc v'+(sel?' sel-out':'')+'" data-pid="'+s.id+'" onclick="toggleOut('+s.id+')">' +
-      '<div class="pc-top"><span class="pc-name">'+esc(s.naam)+'</span><span class="pc-ico">'+(sel?'↕':'')+'</span></div>' +
-      '<div class="pc-time tv" data-time>'+fmt(s.speeltijd)+'</div>' +
-      '<div class="pc-bar"><div class="pc-fill" data-fill style="width:'+width+'%;background:'+speeltijdKleur(s.speeltijd - minT)+'"></div></div>' +
+      '<div class="pc-left">' +
+        '<div class="pc-top"><span class="pc-name">'+esc(s.naam)+'</span><span class="pc-ico">'+(sel?'↕':'')+'</span></div>' +
+        '<div class="pc-time tv" data-time>'+fmt(s.speeltijd)+'</div>' +
+      '</div>' +
+      makePie(pct, kleur) +
       '</div>';
   }).join('') || '<div style="padding:16px 8px;color:var(--muted);font-size:11px;text-align:center">Niemand op het veld</div>';
 
   document.getElementById('bank-list').innerHTML = bank.map(s => {
     const sel = selIn.has(s.id);
-    const width = Math.round(s.speeltijd / maxT * 100);
+    const pct = Math.round(s.speeltijd / Math.max(wedstrijdTijd, 1) * 100);
+    const kleur = speeltijdKleur(s.speeltijd - minT);
     return '<div class="pc bk'+(sel?' sel-in':'')+'" data-pid="'+s.id+'" onclick="toggleIn('+s.id+')">' +
-      '<div class="pc-top"><span class="pc-name">'+esc(s.naam)+'</span><span class="pc-ico">'+(sel?'✓':'')+'</span></div>' +
-      '<div class="pc-time tb" data-time>'+fmt(s.speeltijd)+'</div>' +
-      '<div class="pc-bar"><div class="pc-fill" data-fill style="width:'+width+'%;background:'+speeltijdKleur(s.speeltijd - minT)+'"></div></div>' +
+      '<div class="pc-left">' +
+        '<div class="pc-top"><span class="pc-name">'+esc(s.naam)+'</span><span class="pc-ico">'+(sel?'✓':'')+'</span></div>' +
+        '<div class="pc-time tb" data-time>'+fmt(s.speeltijd)+'</div>' +
+      '</div>' +
+      makePie(pct, kleur) +
       '</div>';
   }).join('') || '<div style="padding:16px 8px;color:var(--muted);font-size:11px;text-align:center">Iedereen staat op het veld</div>';
 }
