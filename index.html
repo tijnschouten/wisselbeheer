@@ -302,6 +302,7 @@ let aantalVeld = 8;
 let wedstrijdTijd = 0;
 let interval = null;
 let isPaused = true;
+let lastTickTs = null;
 let selOut = new Set();
 let selIn = new Set();
 
@@ -373,19 +374,31 @@ function startWedstrijd() {
 }
 
 // TIMER
+function timerTick() {
+  if (isPaused) return;
+  const now = Date.now();
+  const elapsed = Math.round((now - lastTickTs) / 1000);
+  lastTickTs = now;
+  if (elapsed <= 0) return;
+  wedstrijdTijd += elapsed;
+  spelers.forEach(s => { if (s.opVeld) s.speeltijd += elapsed; });
+  updateTimerDisp();
+  updateSpeeltijdUI();
+}
+
 function startTimer() {
   if (interval) clearInterval(interval);
-  interval = setInterval(() => {
-    if (isPaused) return;
-    wedstrijdTijd++;
-    spelers.forEach(s => { if (s.opVeld) s.speeltijd++; });
-    updateTimerDisp();
-    if (wedstrijdTijd % 3 === 0) updateSpeeltijdUI();
-  }, 1000);
+  lastTickTs = Date.now();
+  interval = setInterval(timerTick, 1000);
 }
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !isPaused) timerTick();
+});
 
 function togglePause() {
   isPaused = !isPaused;
+  if (!isPaused) lastTickTs = Date.now();
   const btn = document.getElementById('btn-pause');
   const disp = document.getElementById('timer-disp');
   btn.textContent = isPaused ? '▶ HERVAT' : '⏸ PAUZE';
