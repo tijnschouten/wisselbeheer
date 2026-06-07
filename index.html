@@ -49,10 +49,17 @@ body { background: var(--bg); color: var(--text); font-family: 'Helvetica Neue',
 .qbtn { background: var(--s2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; color: var(--text); font-family: 'Bebas', cursive; font-size: 13px; cursor: pointer; }
 
 /* Spelerslijst setup */
-#player-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 20px; }
-.psi { display: flex; align-items: center; justify-content: space-between; border-radius: 8px; padding: 9px 12px; border: 1px solid var(--border); }
+#player-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.psi { display: flex; align-items: center; justify-content: space-between; border-radius: 8px; padding: 9px 12px; border: 1px solid var(--border); transition: opacity 0.1s; }
 .psi.is-veld { background: rgba(200,240,58,0.07); border-color: rgba(200,240,58,0.2); }
 .psi.is-bank { background: var(--s2); }
+.psi.dragging { opacity: 0.3; }
+.psi-divider { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.psi-divider-line { flex: 1; height: 1px; background: var(--border); }
+.psi-divider-lbl { font-family: 'Bebas', cursive; font-size: 10px; color: var(--muted); letter-spacing: 1px; flex-shrink: 0; }
+.psi-drop-above { border-top: 2px solid var(--accent); }
+.psi-drop-below { border-bottom: 2px solid var(--accent); }
+.drag-handle { color: var(--muted); font-size: 16px; padding: 2px 6px 2px 0; cursor: grab; touch-action: none; flex-shrink: 0; line-height: 1; }
 .psi-left { display: flex; align-items: center; gap: 8px; }
 .psi-num { font-family: 'Bebas', cursive; font-size: 12px; color: var(--muted); }
 .psi-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-family: 'Bebas', cursive; letter-spacing: 1px; }
@@ -219,7 +226,7 @@ input::placeholder { color: rgba(232,240,224,0.25); }
     </div>
 
     <div class="lbl" id="ploeg-lbl" style="display:flex;justify-content:space-between;align-items:center">
-      <span>MIJN PLOEG</span>
+      <span>BEKENDE SPELERS</span>
       <div style="display:flex;gap:6px" id="ploeg-lbl-btns"></div>
     </div>
     <div id="ploeg-section"></div>
@@ -229,16 +236,18 @@ input::placeholder { color: rgba(232,240,224,0.25); }
       <input id="naam-input" type="text" placeholder="Naam of meerdere, kommagescheiden..." autocomplete="off" autocorrect="off" autocapitalize="words">
       <button class="btn-add" onclick="voegToe()">+</button>
     </div>
-    <div class="quick">
-      <span>snel:</span>
-      <button class="qbtn" onclick="vulDummies(8)">8</button>
-      <button class="qbtn" onclick="vulDummies(10)">10</button>
-      <button class="qbtn" onclick="vulDummies(12)">12</button>
-      <button class="qbtn" onclick="vulDummies(14)">14</button>
+    <div class="quick" id="voeg-alle-wrap" style="display:none">
+      <button class="qbtn" onclick="voegAlleBekendToe()">+ voeg alle bekende spelers toe</button>
     </div>
 
     <div id="player-list"></div>
+    <div id="wis-lijst-wrap" style="display:none;text-align:right;margin-bottom:8px">
+      <button onclick="wisLijst()" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:4px 0">✕ wis lijst</button>
+    </div>
     <button class="btn-start" id="btn-start" onclick="startWedstrijd()" disabled>▶ START WEDSTRIJD</button>
+    <div style="text-align:center;padding-bottom:12px">
+      <button onclick="document.getElementById('modal-wis').classList.add('on')" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:4px 8px;">wis alle gegevens</button>
+    </div>
   </div>
 </div>
 
@@ -317,10 +326,34 @@ input::placeholder { color: rgba(232,240,224,0.25); }
   </div>
 </div>
 
+<!-- BEKENDE SPELERS MODAL -->
+<div class="modal-bg" id="modal-bekend">
+  <div class="modal">
+    <h3>BEKENDE SPELERS</h3>
+    <p id="modal-bekend-tekst"></p>
+    <div class="modal-btns">
+      <button class="btn-modal-cancel" onclick="sluitBekendModal(false)">OVERSLAAN</button>
+      <button class="btn-modal-ok" style="background:var(--accent);color:#0d1a0a" onclick="sluitBekendModal(true)">TOEVOEGEN</button>
+    </div>
+  </div>
+</div>
+
+<!-- WIS ALLES MODAL -->
+<div class="modal-bg" id="modal-wis">
+  <div class="modal">
+    <h3>WIS ALLE GEGEVENS?</h3>
+    <p>De opgeslagen ploeg en huidige sessie worden permanent verwijderd.</p>
+    <div class="modal-btns">
+      <button class="btn-modal-cancel" onclick="closeWisModal()">ANNULEER</button>
+      <button class="btn-modal-ok" onclick="wisAlles()">WIS ALLES</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // STATE
 let spelers = [];
-let aantalVeld = 8;
+let aantalVeld = parseInt(localStorage.getItem('aantalVeld') || '8');
 let wedstrijdTijd = 0;
 let interval = null;
 let isPaused = true;
@@ -334,15 +367,53 @@ function capitalize(s) { return s.replace(/\b\w/g, c => c.toUpperCase()); }
 function laadPloeg() { ploeg = JSON.parse(localStorage.getItem('ploeg') || '[]'); }
 function slaOp() { localStorage.setItem('ploeg', JSON.stringify(ploeg)); }
 
+function slaSessionOp() {
+  if (!spelers.length) return;
+  localStorage.setItem('sessie', JSON.stringify({
+    spelers, aantalVeld, wedstrijdTijd, isPaused, savedAt: Date.now(),
+    scherm: document.querySelector('.screen.active')?.id || 'game'
+  }));
+}
+
+function herstelSessie() {
+  const raw = localStorage.getItem('sessie');
+  if (!raw) return false;
+  try {
+    const d = JSON.parse(raw);
+    spelers = d.spelers;
+    aantalVeld = d.aantalVeld;
+    wedstrijdTijd = d.wedstrijdTijd;
+    isPaused = d.isPaused;
+    if (!isPaused && d.savedAt) {
+      const elapsed = Math.floor((Date.now() - d.savedAt) / 1000);
+      wedstrijdTijd += elapsed;
+      spelers.forEach(s => { if (s.opVeld) s.speeltijd += elapsed; });
+    }
+    selOut.clear(); selIn.clear();
+    showScreen(d.scherm || 'game');
+    if (d.scherm === 'game' || !d.scherm) {
+      startTimer();
+      if (isPaused) {
+        const btn = document.getElementById('btn-pause');
+        const disp = document.getElementById('timer-disp');
+        btn.textContent = '▶ HERVAT'; btn.classList.add('paused'); disp.classList.add('paused');
+      }
+      renderLists(); updateHint(); updateTimerDisp();
+    }
+    return true;
+  } catch(e) { localStorage.removeItem('sessie'); return false; }
+}
+
+function clearSessie() { localStorage.removeItem('sessie'); }
+
 function renderPloeg() {
   const sec = document.getElementById('ploeg-section');
   const btns = document.getElementById('ploeg-lbl-btns');
   const namen = spelers.map(s => s.naam.toLowerCase());
 
   if (ploeg.length === 0 && !ploegBewerk) {
-    sec.innerHTML = '<div class="ploeg-leeg">Nog geen ploeg opgeslagen. Voeg spelers toe en sla op.</div>';
-    btns.innerHTML = spelers.length > 0
-      ? '<button class="btn-ploeg primary" onclick="bewaarAlsPloeg()">BEWAAR ALS PLOEG</button>' : '';
+    sec.innerHTML = '<div class="ploeg-leeg">Nog geen bekende spelers. Start een wedstrijd om ze op te slaan.</div>';
+    btns.innerHTML = '';
     return;
   }
 
@@ -363,14 +434,21 @@ function renderPloeg() {
   if (ploegBewerk) {
     btns.innerHTML = '<button class="btn-ploeg primary" onclick="ploegBewerk=false;renderPloeg()">KLAAR</button>';
   } else {
-    btns.innerHTML = '<button class="btn-ploeg" onclick="ploegBewerk=true;renderPloeg()">BEWERK</button>'
-      + (spelers.length > 0 ? '<button class="btn-ploeg primary" onclick="bewaarAlsPloeg()">BEWAAR</button>' : '');
+    btns.innerHTML = '<button class="btn-ploeg" onclick="ploegBewerk=true;renderPloeg()">BEWERK</button>';
   }
 }
 
 function voegUitPloeg(naam) {
   if (spelers.find(s => s.naam.toLowerCase() === naam.toLowerCase())) return;
-  spelers.push({ id: Date.now(), naam, opVeld: false, speeltijd: 0, events: [] });
+  spelers.push({ id: Date.now() + Math.random(), naam, opVeld: false, speeltijd: 0, events: [] });
+  renderSetup();
+}
+
+function voegAlleBekendToe() {
+  ploeg.forEach(naam => {
+    if (!spelers.find(s => s.naam.toLowerCase() === naam.toLowerCase()))
+      spelers.push({ id: Date.now() + Math.random(), naam, opVeld: false, speeltijd: 0, events: [] });
+  });
   renderSetup();
 }
 
@@ -389,7 +467,8 @@ function verwijderUitPloeg(naam) {
 
 // SETUP
 function stepVeld(d) {
-  aantalVeld = Math.max(1, Math.min(11, aantalVeld + d));
+  aantalVeld = Math.max(1, aantalVeld + d);
+  localStorage.setItem('aantalVeld', aantalVeld);
   renderSetup();
 }
 
@@ -442,6 +521,70 @@ function startEditNaam(id) {
   input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { input.removeEventListener('blur', save); renderSetup(); } });
 }
 
+// DRAG & DROP
+let dragSrc = null, dragTarget = null, dragGhost = null;
+
+function initDragDrop() {
+  document.querySelectorAll('.drag-handle').forEach(handle => {
+    handle.addEventListener('pointerdown', startDrag);
+  });
+}
+
+function startDrag(e) {
+  e.preventDefault();
+  const idx = +e.currentTarget.dataset.idx;
+  const row = document.querySelectorAll('#player-list .psi')[idx];
+  dragSrc = idx;
+
+  dragGhost = row.cloneNode(true);
+  const rect = row.getBoundingClientRect();
+  dragGhost.style.cssText = 'position:fixed;left:'+rect.left+'px;top:'+rect.top+'px;width:'+rect.width+'px;opacity:0.85;pointer-events:none;z-index:999;margin:0;';
+  document.body.appendChild(dragGhost);
+  row.classList.add('dragging');
+
+  e.currentTarget.setPointerCapture(e.pointerId);
+  e.currentTarget.addEventListener('pointermove', moveDrag);
+  e.currentTarget.addEventListener('pointerup', endDrag);
+  e.currentTarget.addEventListener('pointercancel', endDrag);
+}
+
+function moveDrag(e) {
+  e.preventDefault();
+  if (!dragGhost) return;
+  dragGhost.style.top = (e.clientY - 20) + 'px';
+
+  const rows = [...document.querySelectorAll('#player-list .psi')];
+  rows.forEach(r => r.classList.remove('psi-drop-above', 'psi-drop-below'));
+
+  let newTarget = rows.length;
+  for (let i = 0; i < rows.length; i++) {
+    const rect = rows[i].getBoundingClientRect();
+    if (e.clientY < rect.top + rect.height / 2) { newTarget = i; break; }
+  }
+  dragTarget = newTarget;
+  if (dragTarget < rows.length) rows[dragTarget].classList.add('psi-drop-above');
+  else if (rows.length) rows[rows.length-1].classList.add('psi-drop-below');
+}
+
+function endDrag(e) {
+  e.currentTarget.removeEventListener('pointermove', moveDrag);
+  e.currentTarget.removeEventListener('pointerup', endDrag);
+  e.currentTarget.removeEventListener('pointercancel', endDrag);
+
+  if (dragGhost) { dragGhost.remove(); dragGhost = null; }
+  document.querySelectorAll('#player-list .psi').forEach(r => r.classList.remove('dragging','psi-drop-above','psi-drop-below'));
+
+  if (dragSrc !== null && dragTarget !== null && dragSrc !== dragTarget) {
+    const to = dragTarget > dragSrc ? dragTarget - 1 : dragTarget;
+    if (dragSrc !== to) {
+      const [item] = spelers.splice(dragSrc, 1);
+      spelers.splice(to, 0, item);
+      renderSetup();
+    }
+  }
+  dragSrc = null; dragTarget = null;
+}
+
 function renderSetup() {
   const n = spelers.length;
   const opVeld = Math.min(aantalVeld, n);
@@ -452,11 +595,14 @@ function renderSetup() {
     : 'van de ' + n + ' spelers: ' + opVeld + ' veld · ' + opBank + ' bank';
 
   const list = document.getElementById('player-list');
+  const divider = '<div class="psi-divider"><div class="psi-divider-line"></div><div class="psi-divider-lbl">BANK</div><div class="psi-divider-line"></div></div>';
   list.innerHTML = spelers.map((s, i) => {
     const isVeld = i < aantalVeld;
-    return '<div class="psi '+(isVeld?'is-veld':'is-bank')+'" id="psi-'+s.id+'">' +
+    const showDivider = i === aantalVeld && n > aantalVeld;
+    return (showDivider ? divider : '') +
+      '<div class="psi '+(isVeld?'is-veld':'is-bank')+'" id="psi-'+s.id+'" data-idx="'+i+'">' +
+      '<span class="drag-handle" data-idx="'+i+'">⠿</span>' +
       '<div class="psi-left">' +
-        '<span class="psi-num">#'+(i+1)+'</span>' +
         '<span class="psi-badge '+(isVeld?'v':'b')+'">'+(isVeld?'VELD':'BANK')+'</span>' +
         '<span class="psi-naam">'+esc(s.naam)+'</span>' +
       '</div>' +
@@ -466,13 +612,41 @@ function renderSetup() {
       '</div>' +
       '</div>';
   }).join('');
+  initDragDrop();
 
   document.getElementById('btn-start').disabled = n < 2;
+  document.getElementById('wis-lijst-wrap').style.display = n > 0 ? 'block' : 'none';
+  const namen = spelers.map(s => s.naam.toLowerCase());
+  const nogNietAllemaal = ploeg.some(naam => !namen.includes(naam.toLowerCase()));
+  document.getElementById('voeg-alle-wrap').style.display = ploeg.length > 0 && nogNietAllemaal ? 'flex' : 'none';
   renderPloeg();
 }
 
 function startWedstrijd() {
-  const n = spelers.length;
+  const nieuw = spelers.filter(s => !ploeg.some(n => n.toLowerCase() === s.naam.toLowerCase()));
+  if (nieuw.length > 0) {
+    const namen = nieuw.map(s => s.naam).join(', ');
+    document.getElementById('modal-bekend-tekst').textContent =
+      (nieuw.length === 1 ? nieuw[0].naam + ' staat' : namen + ' staan') +
+      ' nog niet in bekende spelers. Toevoegen?';
+    document.getElementById('modal-bekend').classList.add('on');
+    return;
+  }
+  doStartWedstrijd();
+}
+
+function sluitBekendModal(toevoegen) {
+  document.getElementById('modal-bekend').classList.remove('on');
+  if (toevoegen) {
+    spelers.forEach(s => {
+      if (!ploeg.some(n => n.toLowerCase() === s.naam.toLowerCase())) ploeg.push(s.naam);
+    });
+    slaOp();
+  }
+  doStartWedstrijd();
+}
+
+function doStartWedstrijd() {
   spelers.forEach((s, i) => {
     s.opVeld = i < aantalVeld;
     s.speeltijd = 0;
@@ -485,6 +659,7 @@ function startWedstrijd() {
   startTimer();
   renderLists();
   updateHint();
+  slaSessionOp();
 }
 
 // TIMER
@@ -498,6 +673,7 @@ function timerTick() {
   spelers.forEach(s => { if (s.opVeld) s.speeltijd += elapsed; });
   updateTimerDisp();
   updateSpeeltijdUI();
+  if (wedstrijdTijd % 10 === 0) slaSessionOp();
 }
 
 function startTimer() {
@@ -513,6 +689,7 @@ document.addEventListener('visibilitychange', () => {
 function togglePause() {
   isPaused = !isPaused;
   if (!isPaused) lastTickTs = Date.now();
+  slaSessionOp();
   const btn = document.getElementById('btn-pause');
   const disp = document.getElementById('timer-disp');
   btn.textContent = isPaused ? '▶ HERVAT' : '⏸ PAUZE';
@@ -645,6 +822,7 @@ function executeSwap() {
   selIn.forEach(id => { const s = spelers.find(x => x.id===id); if(s){s.opVeld=true;s.events.push({type:'in',t});} });
   selOut.clear(); selIn.clear();
   updateHint(); updateCfm(); renderLists();
+  slaSessionOp();
 }
 
 function quickSub() {
@@ -722,10 +900,31 @@ function confirmReset() {
   document.getElementById('modal').classList.add('on');
 }
 function closeModal() { document.getElementById('modal').classList.remove('on'); }
+function closeWisModal() { document.getElementById('modal-wis').classList.remove('on'); }
+function wisAlles() {
+  closeWisModal();
+  if (interval) clearInterval(interval);
+  spelers = []; ploeg = []; aantalVeld = parseInt(localStorage.getItem('aantalVeld') || '8'); wedstrijdTijd = 0; isPaused = true;
+  selOut.clear(); selIn.clear();
+  localStorage.removeItem('sessie');
+  localStorage.removeItem('ploeg');
+  showScreen('setup');
+  renderSetup();
+}
 function doReset() {
   closeModal();
   if (interval) clearInterval(interval);
+  spelers.forEach(s => { s.speeltijd = 0; s.events = []; s.opVeld = false; });
+  wedstrijdTijd = 0; isPaused = true;
+  selOut.clear(); selIn.clear();
+  clearSessie();
   showScreen('setup');
+  renderSetup();
+}
+
+function wisLijst() {
+  spelers = [];
+  clearSessie();
   renderSetup();
 }
 
@@ -768,7 +967,7 @@ function showScreen(id) { document.querySelectorAll('.screen').forEach(s=>s.clas
 function fmt(sec) { return String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0'); }
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-renderSetup();
+if (!herstelSessie()) renderSetup();
 </script>
 <div style="text-align:center;padding:12px 0 8px;color:#444;font-size:10px;opacity:0.4">__BUILD_TIME__ (lokaal)</div>
 </body>
