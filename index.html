@@ -380,7 +380,7 @@ function startTimer() {
     wedstrijdTijd++;
     spelers.forEach(s => { if (s.opVeld) s.speeltijd++; });
     updateTimerDisp();
-    if (wedstrijdTijd % 3 === 0) renderLists();
+    if (wedstrijdTijd % 3 === 0) updateSpeeltijdUI();
   }, 1000);
 }
 
@@ -399,6 +399,23 @@ function updateTimerDisp() {
   document.getElementById('timer-disp').textContent = m+':'+s;
 }
 
+function updateSpeeltijdUI() {
+  const maxT = Math.max(...spelers.map(s => s.speeltijd), 1);
+  document.querySelectorAll('#veld-list [data-pid], #bank-list [data-pid]').forEach(el => {
+    const id = +el.dataset.pid;
+    const s = spelers.find(x => x.id === id);
+    if (!s) return;
+    const pct = Math.round(s.speeltijd / maxT * 100);
+    const timeEl = el.querySelector('[data-time]');
+    const fillEl = el.querySelector('[data-fill]');
+    if (timeEl) timeEl.textContent = fmt(s.speeltijd);
+    if (fillEl) {
+      fillEl.style.width = pct + '%';
+      if (s.opVeld) fillEl.style.background = pct > 75 ? '#ff6b6b' : pct > 45 ? '#f7c948' : 'var(--accent)';
+    }
+  });
+}
+
 // RENDER LISTS
 function renderLists() {
   const maxT = Math.max(...spelers.map(s => s.speeltijd), 1);
@@ -414,20 +431,20 @@ function renderLists() {
     const sel = selOut.has(s.id);
     const pct = Math.round(s.speeltijd / maxT * 100);
     const col = pct > 75 ? '#ff6b6b' : pct > 45 ? '#f7c948' : 'var(--accent)';
-    return '<div class="pc v'+(sel?' sel-out':'')+'" onclick="toggleOut('+s.id+')">' +
+    return '<div class="pc v'+(sel?' sel-out':'')+'" data-pid="'+s.id+'" onclick="toggleOut('+s.id+')">' +
       '<div class="pc-top"><span class="pc-name">'+esc(s.naam)+'</span><span class="pc-ico">'+(sel?'↕':'')+'</span></div>' +
-      '<div class="pc-time tv">'+fmt(s.speeltijd)+'</div>' +
-      '<div class="pc-bar"><div class="pc-fill" style="width:'+pct+'%;background:'+col+'"></div></div>' +
+      '<div class="pc-time tv" data-time>'+fmt(s.speeltijd)+'</div>' +
+      '<div class="pc-bar"><div class="pc-fill" data-fill style="width:'+pct+'%;background:'+col+'"></div></div>' +
       '</div>';
   }).join('') || '<div style="padding:16px 8px;color:var(--muted);font-size:11px;text-align:center">Niemand op het veld</div>';
 
   document.getElementById('bank-list').innerHTML = bank.map(s => {
     const sel = selIn.has(s.id);
     const pct = Math.round(s.speeltijd / maxT * 100);
-    return '<div class="pc bk'+(sel?' sel-in':'')+'" onclick="toggleIn('+s.id+')">' +
+    return '<div class="pc bk'+(sel?' sel-in':'')+'" data-pid="'+s.id+'" onclick="toggleIn('+s.id+')">' +
       '<div class="pc-top"><span class="pc-name">'+esc(s.naam)+'</span><span class="pc-ico">'+(sel?'✓':'')+'</span></div>' +
-      '<div class="pc-time tb">'+fmt(s.speeltijd)+'</div>' +
-      '<div class="pc-bar"><div class="pc-fill" style="width:'+pct+'%;background:var(--gold);opacity:0.45"></div></div>' +
+      '<div class="pc-time tb" data-time>'+fmt(s.speeltijd)+'</div>' +
+      '<div class="pc-bar"><div class="pc-fill" data-fill style="width:'+pct+'%;background:var(--gold);opacity:0.45"></div></div>' +
       '</div>';
   }).join('') || '<div style="padding:16px 8px;color:var(--muted);font-size:11px;text-align:center">Iedereen staat op het veld</div>';
 }
@@ -435,6 +452,12 @@ function renderLists() {
 // WISSEL
 function toggleOut(id) {
   selOut.has(id) ? selOut.delete(id) : selOut.add(id);
+  const bank = spelers.filter(s => !s.opVeld);
+  if (selOut.size === bank.length && selIn.size === 0) {
+    bank.forEach(s => selIn.add(s.id));
+  } else if (selOut.size < bank.length && selIn.size === bank.length) {
+    selIn.clear();
+  }
   updateHint(); updateCfm(); renderLists();
 }
 function toggleIn(id) {
