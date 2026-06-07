@@ -399,8 +399,8 @@ function updateTimerDisp() {
   document.getElementById('timer-disp').textContent = m+':'+s;
 }
 
-function speeltijdKleur(pct) {
-  return pct > 66 ? '#ff6b6b' : pct > 33 ? '#f7c948' : 'var(--accent)';
+function speeltijdKleur(diffSec) {
+  return diffSec > 180 ? '#ff6b6b' : diffSec > 60 ? '#f7c948' : 'var(--accent)';
 }
 
 function updateSpeeltijdUI() {
@@ -412,13 +412,13 @@ function updateSpeeltijdUI() {
     const id = +el.dataset.pid;
     const s = spelers.find(x => x.id === id);
     if (!s) return;
-    const pct = Math.round((s.speeltijd - minT) / range * 100);
+    const width = Math.round(s.speeltijd / maxT * 100);
     const timeEl = el.querySelector('[data-time]');
     const fillEl = el.querySelector('[data-fill]');
     if (timeEl) timeEl.textContent = fmt(s.speeltijd);
     if (fillEl) {
-      fillEl.style.width = pct + '%';
-      fillEl.style.background = speeltijdKleur(pct);
+      fillEl.style.width = width + '%';
+      fillEl.style.background = speeltijdKleur(s.speeltijd - minT);
       fillEl.style.opacity = '1';
     }
   });
@@ -428,8 +428,7 @@ function updateSpeeltijdUI() {
 function renderLists() {
   const tijden = spelers.map(s => s.speeltijd);
   const minT = Math.min(...tijden);
-  const maxT = Math.max(...tijden);
-  const range = maxT - minT || 1;
+  const maxT = Math.max(...tijden, 1);
   const veld = spelers.filter(s => s.opVeld).sort((a,b) => b.speeltijd - a.speeltijd);
   const bank = spelers.filter(s => !s.opVeld).sort((a,b) => a.speeltijd - b.speeltijd);
 
@@ -440,21 +439,21 @@ function renderLists() {
 
   document.getElementById('veld-list').innerHTML = veld.map(s => {
     const sel = selOut.has(s.id);
-    const pct = Math.round((s.speeltijd - minT) / range * 100);
+    const width = Math.round(s.speeltijd / maxT * 100);
     return '<div class="pc v'+(sel?' sel-out':'')+'" data-pid="'+s.id+'" onclick="toggleOut('+s.id+')">' +
       '<div class="pc-top"><span class="pc-name">'+esc(s.naam)+'</span><span class="pc-ico">'+(sel?'↕':'')+'</span></div>' +
       '<div class="pc-time tv" data-time>'+fmt(s.speeltijd)+'</div>' +
-      '<div class="pc-bar"><div class="pc-fill" data-fill style="width:'+pct+'%;background:'+speeltijdKleur(pct)+'"></div></div>' +
+      '<div class="pc-bar"><div class="pc-fill" data-fill style="width:'+width+'%;background:'+speeltijdKleur(s.speeltijd - minT)+'"></div></div>' +
       '</div>';
   }).join('') || '<div style="padding:16px 8px;color:var(--muted);font-size:11px;text-align:center">Niemand op het veld</div>';
 
   document.getElementById('bank-list').innerHTML = bank.map(s => {
     const sel = selIn.has(s.id);
-    const pct = Math.round((s.speeltijd - minT) / range * 100);
+    const width = Math.round(s.speeltijd / maxT * 100);
     return '<div class="pc bk'+(sel?' sel-in':'')+'" data-pid="'+s.id+'" onclick="toggleIn('+s.id+')">' +
       '<div class="pc-top"><span class="pc-name">'+esc(s.naam)+'</span><span class="pc-ico">'+(sel?'✓':'')+'</span></div>' +
       '<div class="pc-time tb" data-time>'+fmt(s.speeltijd)+'</div>' +
-      '<div class="pc-bar"><div class="pc-fill" data-fill style="width:'+pct+'%;background:'+speeltijdKleur(pct)+'"></div></div>' +
+      '<div class="pc-bar"><div class="pc-fill" data-fill style="width:'+width+'%;background:'+speeltijdKleur(s.speeltijd - minT)+'"></div></div>' +
       '</div>';
   }).join('') || '<div style="padding:16px 8px;color:var(--muted);font-size:11px;text-align:center">Iedereen staat op het veld</div>';
 }
