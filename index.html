@@ -182,6 +182,22 @@ body { background: var(--bg); color: var(--text); font-family: 'Helvetica Neue',
 input::placeholder { color: rgba(232,240,224,0.25); }
 ::-webkit-scrollbar { width: 2px; }
 ::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* Ploeg */
+.ploeg-leeg { font-size: 12px; color: var(--muted); padding: 4px 0 10px; }
+.ploeg-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.ploeg-chip { background: var(--s2); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 13px; cursor: pointer; user-select: none; -webkit-user-select: none; display: flex; align-items: center; gap: 6px; }
+.ploeg-chip.toegevoegd { opacity: 0.35; cursor: default; }
+.ploeg-chip.del .chip-x { display: inline; }
+.chip-x { display: none; color: var(--red); font-size: 14px; line-height: 1; }
+.ploeg-acties { display: flex; gap: 7px; margin-bottom: 16px; }
+.btn-ploeg { background: var(--s2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 12px; color: var(--text); font-family: 'Bebas', cursive; font-size: 13px; letter-spacing: 1px; cursor: pointer; }
+.btn-ploeg.primary { background: rgba(200,240,58,0.1); border-color: rgba(200,240,58,0.3); color: var(--accent); }
+
+/* Edit naam */
+.btn-edit-naam { background: none; border: none; color: var(--muted); font-size: 14px; padding: 2px 4px; cursor: pointer; }
+.psi-edit-input { background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; padding: 3px 7px; color: var(--text); font-size: 14px; flex: 1; min-width: 0; outline: none; }
+.btn-save-naam { background: var(--accent); border: none; border-radius: 6px; padding: 4px 10px; color: #0d1a0a; font-family: 'Bebas', cursive; font-size: 13px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -202,9 +218,15 @@ input::placeholder { color: rgba(232,240,224,0.25); }
       <div class="step-label" id="step-info">van de 0 spelers starten op het veld</div>
     </div>
 
+    <div class="lbl" id="ploeg-lbl" style="display:flex;justify-content:space-between;align-items:center">
+      <span>MIJN PLOEG</span>
+      <div style="display:flex;gap:6px" id="ploeg-lbl-btns"></div>
+    </div>
+    <div id="ploeg-section"></div>
+
     <div class="lbl">SPELERS TOEVOEGEN</div>
     <div class="input-row">
-      <input id="naam-input" type="text" placeholder="Naam speler..." autocomplete="off" autocorrect="off" autocapitalize="words">
+      <input id="naam-input" type="text" placeholder="Naam of meerdere, kommagescheiden..." autocomplete="off" autocorrect="off" autocapitalize="words">
       <button class="btn-add" onclick="voegToe()">+</button>
     </div>
     <div class="quick">
@@ -305,6 +327,65 @@ let isPaused = true;
 let lastTickTs = null;
 let selOut = new Set();
 let selIn = new Set();
+let ploeg = JSON.parse(localStorage.getItem('ploeg') || '[]');
+let ploegBewerk = false;
+
+function capitalize(s) { return s.replace(/\b\w/g, c => c.toUpperCase()); }
+function laadPloeg() { ploeg = JSON.parse(localStorage.getItem('ploeg') || '[]'); }
+function slaOp() { localStorage.setItem('ploeg', JSON.stringify(ploeg)); }
+
+function renderPloeg() {
+  const sec = document.getElementById('ploeg-section');
+  const btns = document.getElementById('ploeg-lbl-btns');
+  const namen = spelers.map(s => s.naam.toLowerCase());
+
+  if (ploeg.length === 0 && !ploegBewerk) {
+    sec.innerHTML = '<div class="ploeg-leeg">Nog geen ploeg opgeslagen. Voeg spelers toe en sla op.</div>';
+    btns.innerHTML = spelers.length > 0
+      ? '<button class="btn-ploeg primary" onclick="bewaarAlsPloeg()">BEWAAR ALS PLOEG</button>' : '';
+    return;
+  }
+
+  const chips = ploeg.map(naam => {
+    const al = namen.includes(naam.toLowerCase());
+    if (ploegBewerk) {
+      return '<div class="ploeg-chip del">'
+        + esc(naam)
+        + '<span class="chip-x" onclick="verwijderUitPloeg(\''+esc(naam)+'\')">✕</span>'
+        + '</div>';
+    }
+    return '<div class="ploeg-chip'+(al?' toegevoegd':'')+'" onclick="'+(al?'':'voegUitPloeg(\''+esc(naam)+'\')')+'">'
+      + esc(naam) + '</div>';
+  }).join('');
+
+  sec.innerHTML = '<div class="ploeg-chips">'+chips+'</div>';
+
+  if (ploegBewerk) {
+    btns.innerHTML = '<button class="btn-ploeg primary" onclick="ploegBewerk=false;renderPloeg()">KLAAR</button>';
+  } else {
+    btns.innerHTML = '<button class="btn-ploeg" onclick="ploegBewerk=true;renderPloeg()">BEWERK</button>'
+      + (spelers.length > 0 ? '<button class="btn-ploeg primary" onclick="bewaarAlsPloeg()">BEWAAR</button>' : '');
+  }
+}
+
+function voegUitPloeg(naam) {
+  if (spelers.find(s => s.naam.toLowerCase() === naam.toLowerCase())) return;
+  spelers.push({ id: Date.now(), naam, opVeld: false, speeltijd: 0, events: [] });
+  renderSetup();
+}
+
+function bewaarAlsPloeg() {
+  ploeg = spelers.map(s => s.naam);
+  slaOp();
+  ploegBewerk = false;
+  renderPloeg();
+}
+
+function verwijderUitPloeg(naam) {
+  ploeg = ploeg.filter(n => n.toLowerCase() !== naam.toLowerCase());
+  slaOp();
+  renderPloeg();
+}
 
 // SETUP
 function stepVeld(d) {
@@ -314,10 +395,21 @@ function stepVeld(d) {
 
 function voegToe() {
   const inp = document.getElementById('naam-input');
-  const naam = inp.value.trim();
-  if (!naam || spelers.find(s => s.naam.toLowerCase() === naam.toLowerCase())) return;
-  spelers.push({ id: Date.now(), naam, opVeld: false, speeltijd: 0, events: [] });
+  const namen = inp.value.split(/[,;]+/).map(n => capitalize(n.trim())).filter(Boolean);
+  if (!namen.length) return;
+  namen.forEach(naam => {
+    if (!spelers.find(s => s.naam.toLowerCase() === naam.toLowerCase()))
+      spelers.push({ id: Date.now() + Math.random(), naam, opVeld: false, speeltijd: 0, events: [] });
+  });
   inp.value = '';
+  renderSetup();
+}
+
+function hernoemSpeler(id, nieuwNaam) {
+  nieuwNaam = capitalize(nieuwNaam.trim());
+  if (!nieuwNaam) return;
+  const s = spelers.find(s => s.id === id);
+  if (s) s.naam = nieuwNaam;
   renderSetup();
 }
 document.getElementById('naam-input').addEventListener('keydown', e => { if (e.key === 'Enter') voegToe(); });
@@ -332,6 +424,24 @@ function verwijder(id) {
   renderSetup();
 }
 
+function startEditNaam(id) {
+  const s = spelers.find(x => x.id === id);
+  if (!s) return;
+  const row = document.getElementById('psi-'+id);
+  if (!row) return;
+  const left = row.querySelector('.psi-left');
+  const naamSpan = left.querySelector('.psi-naam');
+  const input = document.createElement('input');
+  input.className = 'psi-edit-input';
+  input.value = s.naam;
+  naamSpan.replaceWith(input);
+  input.focus();
+  input.select();
+  const save = () => { hernoemSpeler(id, input.value); };
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); if (e.key === 'Escape') { input.removeEventListener('blur', save); renderSetup(); } });
+}
+
 function renderSetup() {
   const n = spelers.length;
   const opVeld = Math.min(aantalVeld, n);
@@ -344,17 +454,21 @@ function renderSetup() {
   const list = document.getElementById('player-list');
   list.innerHTML = spelers.map((s, i) => {
     const isVeld = i < aantalVeld;
-    return '<div class="psi '+(isVeld?'is-veld':'is-bank')+'">' +
+    return '<div class="psi '+(isVeld?'is-veld':'is-bank')+'" id="psi-'+s.id+'">' +
       '<div class="psi-left">' +
         '<span class="psi-num">#'+(i+1)+'</span>' +
         '<span class="psi-badge '+(isVeld?'v':'b')+'">'+(isVeld?'VELD':'BANK')+'</span>' +
-        esc(s.naam) +
+        '<span class="psi-naam">'+esc(s.naam)+'</span>' +
       '</div>' +
-      '<button class="btn-del" onclick="verwijder('+s.id+')">✕</button>' +
+      '<div style="display:flex;align-items:center;gap:2px">' +
+        '<button class="btn-edit-naam" onclick="startEditNaam('+s.id+')">✏</button>' +
+        '<button class="btn-del" onclick="verwijder('+s.id+')">✕</button>' +
+      '</div>' +
       '</div>';
   }).join('');
 
   document.getElementById('btn-start').disabled = n < 2;
+  renderPloeg();
 }
 
 function startWedstrijd() {
