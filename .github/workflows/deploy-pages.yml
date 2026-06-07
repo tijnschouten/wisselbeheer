@@ -32,6 +32,9 @@ jobs:
         with:
           enablement: true
 
+      - name: Inject build timestamp
+        run: sed -i "s/__BUILD_TIME__ (lokaal)/$(date -u '+%Y-%m-%d %H:%M UTC')/g" index.html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
